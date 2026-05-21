@@ -1,19 +1,20 @@
 import requests
 import time
-import json
 
 BOT_TOKEN = "8997355665:AAFdJsX52b6MDS1eF3jm-XXa3CCxs_L9Hmk"
 CHAT_ID = "947121560"
-SESSION_SID = "s%3AOdu33_IFUNJ07-6rcorL5_d2jw00qy7-.nh%2Bj9JRkBFSFl5ktHNcveZqb0FU67Xfhqdkh2o6C%2Bsw"
-CSRF_TOKEN = "nDNrSvOInf3fhvUDPj2URwLf"
+
+SESSION_SID = "s%3AbNa3jfJs63Lat4WCqMoet8X7moV-r36n.olOLHB5ca3SWWLPi5tiCPvsI2rj0%2FeaIc6S9TWypY6U"
+XSRF_TOKEN = "CpAASdjQ-0Z1BZSrcSaASlDbiPazP59tNQDA"
+
 SEEN = set()
 
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-    "Cookie": f"respondent.session.sid={SESSION_SID}; _csrf={CSRF_TOKEN}",
-    "Referer": "https://app.respondent.io",
+    "Cookie": f"respondent.session.sid={SESSION_SID}; XSRF-TOKEN={XSRF_TOKEN}",
+    "Referer": "https://app.respondent.io/next/participants/projects?sort=publishedAt&eligible=true",
     "Accept": "application/json",
-    "X-CSRF-Token": CSRF_TOKEN
+    "X-XSRF-TOKEN": XSRF_TOKEN
 }
 
 API_URL = "https://app.respondent.io/api/v2/projects?sort=publishedAt&eligible=true&limit=20"
@@ -33,33 +34,37 @@ def check():
     r = requests.get(API_URL, headers=HEADERS, timeout=15)
     print(f"Status: {r.status_code}")
     print(f"Response preview: {r.text[:300]}")
-    
+
     if r.status_code != 200:
-        print("Session may have expired. Update your cookies.")
+        print("Session may have expired.")
+        return
+
+    if r.text.strip().startswith("<"):
+        print("Still returning HTML - session cookie needs refresh.")
         return
 
     try:
         data = r.json()
         projects = data.get("projects", data.get("data", []))
+        print(f"Found {len(projects)} studies")
         for project in projects:
             title = project.get("title", project.get("name", ""))
             pid = project.get("_id", project.get("id", title))
             if title and pid not in SEEN:
                 SEEN.add(pid)
-                incentive = project.get("incentive", "")
-                duration = project.get("duration", "")
+                incentive = project.get("incentive", "N/A")
+                duration = project.get("duration", "N/A")
                 alert(
-                    f"NEW STUDY ON RESPONDENT!\n\n"
-                    f"Study: {title}\n"
-                    f"Pay: {incentive}\n"
-                    f"Duration: {duration}\n\n"
-                    f"Apply Now: {APPLY_URL}"
+                    f"🆕 NEW STUDY ON RESPONDENT!\n\n"
+                    f"📋 Study: {title}\n"
+                    f"💰 Pay: {incentive}\n"
+                    f"⏱ Duration: {duration}\n\n"
+                    f"👉 Apply Now: {APPLY_URL}"
                 )
     except Exception as e:
         print(f"Parse error: {e}")
-        print(r.text[:500])
 
-alert("Respondent Monitor RESTARTED with API method! Checking every 60 seconds.")
+alert("✅ Respondent Monitor STARTED! Checking every 60 seconds...")
 print("Bot started. Monitoring every 60 seconds...")
 
 while True:
