@@ -11,9 +11,10 @@ APPLY_URL = "https://app.respondent.io/next/participants/projects?sort=published
 session = requests.Session()
 session.headers.update({
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-    "Referer": "https://app.respondent.io",
     "Accept": "application/json",
-    "Content-Type": "application/json"
+    "Content-Type": "application/json",
+    "Origin": "https://app.respondent.io",
+    "Referer": "https://app.respondent.io/next/participants/login"
 })
 
 def alert(msg):
@@ -27,14 +28,14 @@ def alert(msg):
         print(f"Telegram error: {e}")
 
 def login():
-    print("Logging in...")
+    print("Logging in via core-api...")
     r = session.post(
-        "https://app.respondent.io/api/v2/auth/login",
+        "https://core-api.respondent.io/auth/login",
         json={"email": EMAIL, "password": PASSWORD},
         timeout=15
     )
     print(f"Login status: {r.status_code}")
-    print(f"Login response: {r.text[:300]}")
+    print(f"Login response: {r.text[:400]}")
     return r.status_code == 200
 
 def check():
@@ -42,7 +43,7 @@ def check():
         "https://app.respondent.io/api/v2/projects?sort=publishedAt&eligible=true&limit=20",
         timeout=15
     )
-    print(f"Status: {r.status_code} | Preview: {r.text[:100]}")
+    print(f"Status: {r.status_code} | Preview: {r.text[:150]}")
 
     if r.text.strip().startswith("<"):
         print("Session expired — re-logging in...")
@@ -67,7 +68,7 @@ def check():
             )
 
 if login():
-    alert("✅ Respondent Monitor STARTED with auto-login!")
+    alert("✅ Respondent Monitor STARTED!")
     print("Bot started. Monitoring every 60 seconds...")
     while True:
         try:
@@ -76,5 +77,5 @@ if login():
             print(f"Error: {e}")
         time.sleep(60)
 else:
-    print("Login failed. Check your email/password.")
-    alert("❌ Respondent Monitor login failed. Check credentials.")
+    print("Login failed. Check credentials.")
+    alert("❌ Login failed. Check credentials.")
