@@ -1,37 +1,13 @@
+import asyncio
 import requests
-import time
+from playwright.async_api import async_playwright
 
 BOT_TOKEN = "8997355665:AAFdJsX52b6MDS1eF3jm-XXa3CCxs_L9Hmk"
 CHAT_ID = "947121560"
+EMAIL = "barbragensley1141@outlook.com"
+PASSWORD = "ayoboya1"
 SEEN = set()
 APPLY_URL = "https://app.respondent.io/next/participants/projects?sort=publishedAt&eligible=true"
-
-# --- PASTE ALL YOUR COOKIES HERE AS ONE STRING ---
-COOKIES = (
-    "_csrf=nDNrSvOInf3fhvUDPj2URwLf; "
-    "ajs_anonymous_id=afb1aa20-d783-4883-8b2e-8cd16a401650; "
-    "ajs_user_id=6a0371a7e7ac41b1ede82a75; "
-    "respondent.session.sid=s%3AbNa3jfJs63Lat4WCqMoet8X7moV-r36n.olOLHB5ca3SWWLPi5tiCPvsI2rj0%2FeaIc6S9TWypY6U; "
-    "XSRF-TOKEN=CpAASdjQ-0Z1BZSrcSaASlDbiPazP59tNQDA; "
-    "rio_cookie_consent=denied; "
-    "intercom-device-id-mzi9ntpw=23641c24-bcb7-4326-9e6a-4bac1060ac01; "
-    "intercom-id-mzi9ntpw=41795592-01bb-4904-b1bc-da36dcdbd6f2"
-)
-
-HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-    "Accept": "application/json, text/plain, */*",
-    "Accept-Language": "en-US,en;q=0.9",
-    "Cookie": COOKIES,
-    "Referer": "https://app.respondent.io/next/participants/projects?sort=publishedAt&eligible=true",
-    "Origin": "https://app.respondent.io",
-    "X-XSRF-TOKEN": "CpAASdjQ-0Z1BZSrcSaASlDbiPazP59tNQDA",
-    "sec-ch-ua": '"Chromium";v="124", "Google Chrome";v="124"',
-    "sec-ch-ua-platform": '"Windows"',
-    "sec-fetch-dest": "empty",
-    "sec-fetch-mode": "cors",
-    "sec-fetch-site": "same-origin"
-}
 
 def alert(msg):
     try:
@@ -43,42 +19,63 @@ def alert(msg):
     except Exception as e:
         print(f"Telegram error: {e}")
 
-def check():
-    r = requests.get(
-        "https://app.respondent.io/api/v2/projects?sort=publishedAt&eligible=true&limit=20",
-        headers=HEADERS,
-        timeout=15
-    )
-    print(f"Status: {r.status_code} | Preview: {r.text[:200]}")
+async def monitor():
+    async with async_playwright() as p:
+        browser = await p.chromium.launch(headless=True)
+        context = await browser.new_context(
+            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0.0.0 Safari/537.36"
+        )
+        page = await context.new_page()
 
-    if r.text.strip().startswith("<"):
-        alert("⚠️ Cookies expired! Please update monitor.py with fresh cookies.")
-        print("HTML returned — cookies need refreshing.")
-        time.sleep(3600)
-        return
+        print("Logging in...")
+        await page.goto("https://app.respondent.io/login", wait_until="networkidle")
+        await page.fill('input[type="email"]', EMAIL)
+        await page.fill('input[type="password"]', PASSWORD)
+        await page.click('button[type="submit"]')
+        await page.wait_for_timeout(5000)
 
-    data = r.json()
-    projects = data.get("projects", data.get("data", []))
-    print(f"✅ Found {len(projects)} studies")
+        url = page.url
+        print(f"After login URL: {url}")
 
-    for p in projects:
-        title = p.get("title", p.get("name", ""))
-        pid = p.get("_id", p.get("id", title))
-        if title and pid not in SEEN:
-            SEEN.add(pid)
-            alert(
-                f"🆕 NEW STUDY ON RESPONDENT!\n\n"
-                f"📋 Study: {title}\n"
-                f"💰 Pay: {p.get('incentive', 'N/A')}\n"
-                f"⏱ Duration: {p.get('duration', 'N/A')}\n\n"
-                f"👉 Apply: {APPLY_URL}"
-            )
+        if "login" in url:
+            print("Login failed — check credentials or page structure")
+            alert("❌ Respondent login failed. Check credentials.")
+            await browser.close()
+            return
 
-alert("✅ Respondent Monitor STARTED!")
-print("Bot started. Monitoring every 60 seconds...")
-while True:
-    try:
-        check()
-    except Exception as e:
-        print(f"Error: {e}")
-    time.sleep(60)
+        alert("✅ Respondent Monitor STARTED (Playwright)! Checking every 60s...")
+        print("Logged in! Monitoring every 60 seconds...")
+
+        while True:
+            try:
+                await page.goto(APPLY_URL, wait_until="networkidle")
+                await page.wait_for_timeout(3000)
+
+                content = await page.content()
+                print(f"Page loaded. Length: {len(content)}")
+
+                # Extract study titles from page
+                titles = await page.eval_on_selector_all(
+                    "h2, h3, [class*='title'], [class*='project'], [class*='study']",
+                    "els => els.map(e => e.innerText.trim()).filter(t => t.length > 5)"
+                )
+
+                print(f"Found {len(titles)} potential studies: {titles[:3]}")
+
+                for title in titles:
+                    if title not in SEEN and len(title) > 10:
+                        SEEN.add(title)
+                        alert(
+                            f"🆕 NEW STUDY ON RESPONDENT!\n\n"
+                            f"📋 {title}\n\n"
+                            f"👉 Apply: {APPLY_URL}"
+                        )
+
+            except Exception as e:
+                print(f"Check error: {e}")
+
+            await asyncio.sleep(60)
+
+        await browser.close()
+
+asyncio.run(monitor())
