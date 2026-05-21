@@ -16,6 +16,11 @@ HEADERS = {
 
 URL = "https://app.respondent.io/next/participants/projects?sort=publishedAt&eligible=true"
 
+IGNORE = {
+    "available projects", "share respondent", "no projects available",
+    "eligible projects", "all projects", "projects", ""
+}
+
 def alert(msg):
     try:
         requests.post(
@@ -29,18 +34,24 @@ def alert(msg):
 def check():
     r = requests.get(URL, headers=HEADERS, timeout=15)
     soup = BeautifulSoup(r.text, "html.parser")
-    titles = soup.find_all("h2")
-    for t in titles:
+
+    studies = (
+        soup.find_all("h3") or
+        soup.find_all("a", class_=lambda x: x and "project" in x.lower()) or
+        soup.find_all("div", class_=lambda x: x and "title" in x.lower())
+    )
+
+    for t in studies:
         text = t.get_text(strip=True)
-        if text and text not in SEEN:
+        if text and text.lower() not in IGNORE and text not in SEEN and len(text) > 10:
             SEEN.add(text)
             alert(
                 f"NEW STUDY ON RESPONDENT!\n\n"
-                f"{text}\n\n"
+                f"Study: {text}\n\n"
                 f"Apply Now: {URL}"
             )
 
-alert("Respondent Monitor is LIVE! Checking every 60 seconds. You will be alerted the moment a new study appears!")
+alert("Respondent Monitor UPDATED & LIVE! Now detecting real study names. Checking every 60 seconds.")
 
 print("Bot started. Monitoring every 60 seconds...")
 
