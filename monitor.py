@@ -20,7 +20,7 @@ def alert(msg):
     try:
         requests.post(
             f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage",
-            data={"chat_id": CHAT_ID, "text": msg, "parse_mode": "HTML"},
+            data={"chat_id": CHAT_ID, "text": msg},
             timeout=10
         )
     except Exception as e:
@@ -35,12 +35,12 @@ def check():
         if text and text not in SEEN:
             SEEN.add(text)
             alert(
-                f"🔔 <b>NEW STUDY ON RESPONDENT!</b>\n\n"
-                f"📋 <b>{text}</b>\n\n"
-                f"🔗 <a href=\"{URL}\">Click Here to Apply Now</a>"
+                f"NEW STUDY ON RESPONDENT!\n\n"
+                f"{text}\n\n"
+                f"Apply Now: {URL}"
             )
 
-alert("✅ <b>Respondent Monitor is LIVE!</b>\n\n🔍 Checking every 60 seconds.\n🔔 You'll be alerted the moment a new study appears!")
+alert("Respondent Monitor is LIVE! Checking every 60 seconds. You will be alerted the moment a new study appears!")
 
 print("Bot started. Monitoring every 60 seconds...")
 
@@ -49,5 +49,5 @@ while True:
         check()
     except Exception as e:
         print(f"Error: {e}")
-        alert(f"⚠️ Error: {e}\nRetrying in 60 seconds.")
+        alert(f"Error: {e} Retrying in 60 seconds.")
     time.sleep(60)
