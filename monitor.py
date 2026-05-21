@@ -21,61 +21,57 @@ def alert(msg):
 
 async def monitor():
     async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=True)
+        browser = await p.chromium.launch(
+            headless=True,
+            args=["--no-sandbox", "--disable-dev-shm-usage"]
+        )
         context = await browser.new_context(
             user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0.0.0 Safari/537.36"
         )
         page = await context.new_page()
 
         print("Logging in...")
-        await page.goto("https://app.respondent.io/login", wait_until="networkidle")
+        await page.goto("https://app.respondent.io/login", wait_until="domcontentloaded")
+        await page.wait_for_timeout(3000)
+
         await page.fill('input[type="email"]', EMAIL)
         await page.fill('input[type="password"]', PASSWORD)
         await page.click('button[type="submit"]')
-        await page.wait_for_timeout(5000)
+        await page.wait_for_timeout(8000)
 
-        url = page.url
-        print(f"After login URL: {url}")
+        print(f"After login URL: {page.url}")
 
-        if "login" in url:
-            print("Login failed — check credentials or page structure")
-            alert("❌ Respondent login failed. Check credentials.")
+        if "login" in page.url.lower():
+            print("Login failed.")
+            alert("❌ Respondent login failed.")
             await browser.close()
             return
 
-        alert("✅ Respondent Monitor STARTED (Playwright)! Checking every 60s...")
-        print("Logged in! Monitoring every 60 seconds...")
+        alert("✅ Respondent monitor started.")
+        print("Logged in. Monitoring every 60 seconds...")
 
         while True:
             try:
-                await page.goto(APPLY_URL, wait_until="networkidle")
-                await page.wait_for_timeout(3000)
+                await page.goto(APPLY_URL, wait_until="domcontentloaded")
+                await page.wait_for_timeout(5000)
 
-                content = await page.content()
-                print(f"Page loaded. Length: {len(content)}")
-
-                # Extract study titles from page
                 titles = await page.eval_on_selector_all(
-                    "h2, h3, [class*='title'], [class*='project'], [class*='study']",
-                    "els => els.map(e => e.innerText.trim()).filter(t => t.length > 5)"
+                    "h1, h2, h3, h4, [class*='title']",
+                    """els => els
+                        .map(e => e.innerText.trim())
+                        .filter(t => t && t.length > 12)"""
                 )
 
-                print(f"Found {len(titles)} potential studies: {titles[:3]}")
+                print(f"Found {len(titles)} possible titles")
 
                 for title in titles:
-                    if title not in SEEN and len(title) > 10:
+                    if title not in SEEN:
                         SEEN.add(title)
-                        alert(
-                            f"🆕 NEW STUDY ON RESPONDENT!\n\n"
-                            f"📋 {title}\n\n"
-                            f"👉 Apply: {APPLY_URL}"
-                        )
+                        alert(f"🆕 NEW RESPONDENT ITEM\\n\\n{title}\\n\\n{APPLY_URL}")
 
             except Exception as e:
                 print(f"Check error: {e}")
 
             await asyncio.sleep(60)
-
-        await browser.close()
 
 asyncio.run(monitor())
