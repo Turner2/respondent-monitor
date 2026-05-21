@@ -1,6 +1,6 @@
 import requests
 import time
-from bs4 import BeautifulSoup
+import json
 
 BOT_TOKEN = "8997355665:AAFdJsX52b6MDS1eF3jm-XXa3CCxs_L9Hmk"
 CHAT_ID = "947121560"
@@ -11,15 +11,13 @@ SEEN = set()
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
     "Cookie": f"respondent.session.sid={SESSION_SID}; _csrf={CSRF_TOKEN}",
-    "Referer": "https://app.respondent.io"
+    "Referer": "https://app.respondent.io",
+    "Accept": "application/json",
+    "X-CSRF-Token": CSRF_TOKEN
 }
 
-URL = "https://app.respondent.io/next/participants/projects?sort=publishedAt&eligible=true"
-
-IGNORE = {
-    "available projects", "share respondent", "no projects available",
-    "eligible projects", "all projects", "projects", ""
-}
+API_URL = "https://app.respondent.io/api/v2/projects?sort=publishedAt&eligible=true&limit=20"
+APPLY_URL = "https://app.respondent.io/next/participants/projects?sort=publishedAt&eligible=true"
 
 def alert(msg):
     try:
@@ -32,27 +30,36 @@ def alert(msg):
         print(f"Telegram error: {e}")
 
 def check():
-    r = requests.get(URL, headers=HEADERS, timeout=15)
-    soup = BeautifulSoup(r.text, "html.parser")
+    r = requests.get(API_URL, headers=HEADERS, timeout=15)
+    print(f"Status: {r.status_code}")
+    print(f"Response preview: {r.text[:300]}")
+    
+    if r.status_code != 200:
+        print("Session may have expired. Update your cookies.")
+        return
 
-    studies = (
-        soup.find_all("h3") or
-        soup.find_all("a", class_=lambda x: x and "project" in x.lower()) or
-        soup.find_all("div", class_=lambda x: x and "title" in x.lower())
-    )
+    try:
+        data = r.json()
+        projects = data.get("projects", data.get("data", []))
+        for project in projects:
+            title = project.get("title", project.get("name", ""))
+            pid = project.get("_id", project.get("id", title))
+            if title and pid not in SEEN:
+                SEEN.add(pid)
+                incentive = project.get("incentive", "")
+                duration = project.get("duration", "")
+                alert(
+                    f"NEW STUDY ON RESPONDENT!\n\n"
+                    f"Study: {title}\n"
+                    f"Pay: {incentive}\n"
+                    f"Duration: {duration}\n\n"
+                    f"Apply Now: {APPLY_URL}"
+                )
+    except Exception as e:
+        print(f"Parse error: {e}")
+        print(r.text[:500])
 
-    for t in studies:
-        text = t.get_text(strip=True)
-        if text and text.lower() not in IGNORE and text not in SEEN and len(text) > 10:
-            SEEN.add(text)
-            alert(
-                f"NEW STUDY ON RESPONDENT!\n\n"
-                f"Study: {text}\n\n"
-                f"Apply Now: {URL}"
-            )
-
-alert("Respondent Monitor UPDATED & LIVE! Now detecting real study names. Checking every 60 seconds.")
-
+alert("Respondent Monitor RESTARTED with API method! Checking every 60 seconds.")
 print("Bot started. Monitoring every 60 seconds...")
 
 while True:
@@ -60,5 +67,4 @@ while True:
         check()
     except Exception as e:
         print(f"Error: {e}")
-        alert(f"Error: {e} Retrying in 60 seconds.")
     time.sleep(60)
